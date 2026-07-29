@@ -1,26 +1,763 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="es" class="h-full bg-slate-100">
 <head>
-    <meta charset="utf-8" />
-    <link href="https://dev-cdn.minambiente.gov.co/geo-visor-cmp/v1/web-components-geovisor.css" rel="stylesheet">
-    <style>
-        html,
-        body {
-            padding: 0;
-            margin: 0;
-            height: 100%;
-            width: 100%;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tablero Privado de Control - Panorama Político</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería PapaParse para lectura de CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Iconos Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Librería html2pdf.js para generación de PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
+<body class="font-sans text-slate-800 min-h-full flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
-<body>
-    <div id="mapContainer">
-        <wecmp-geovisor-mapa topic="AMBIENTE"></wecmp-geovisor-mapa>
+    <!-- Encabezado -->
+    <header class="bg-slate-900 text-white py-3.5 px-4 sm:px-8 shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-600 rounded-xl">
+                    <i data-lucide="shield-check" class="text-white w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-base sm:text-lg font-bold">Sistema de Control Político</h1>
+                    <p class="text-slate-400 text-[11px]" id="userSessionBadge">Estado: Cargando repositorio...</p>
+                </div>
+            </div>
+            
+            <button id="logoutBtn" onclick="handleLogout()" class="hidden px-3.5 py-1.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Cerrar Sesión
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex-1 w-full">
+
+        <!-- 1. PANTALLA DE ACCESO OBLIGATORIO (LOGIN) -->
+        <div id="loginView" class="max-w-md mx-auto py-10 space-y-6">
+            <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xl space-y-5">
+                <div class="text-center space-y-2">
+                    <div class="inline-flex p-3.5 bg-blue-50 text-blue-600 rounded-2xl">
+                        <i data-lucide="lock" class="w-7 h-7"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-900">Acceso Autenticado</h2>
+                    <p class="text-xs text-slate-500">Ingresa con tus credenciales de Super Administrador o Usuario Enlace para revisar la información.</p>
+                </div>
+
+                <form onsubmit="handleLogin(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Usuario</label>
+                        <input type="text" id="loginUser" required class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="Ingresa tu usuario">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Contraseña</label>
+                        <input type="password" id="loginPass" required class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="••••••••">
+                    </div>
+                    <div id="loginError" class="text-xs text-rose-600 hidden font-medium text-center bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                        Credenciales incorrectas o usuario no registrado.
+                    </div>
+                    <button type="submit" id="btnLoginSubmit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md">
+                        Iniciar Sesión
+                    </button>
+                </form>
+
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                    <p class="font-bold text-slate-700">Cuentas por defecto:</p>
+                    <p>• <strong>Super Admin:</strong> usuario <code>admin</code> / clave <code>admin123</code></p>
+                    <p>• <strong>Enlace Demo:</strong> usuario <code>enlace</code> / clave <code>enlace123</code></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. APARTADO PRINCIPAL (SOLO VISIBLE TRAS AUTENTICARSE) -->
+        <div id="authenticatedApp" class="hidden space-y-6">
+
+            <!-- Pestañas para el Super Administrador -->
+            <div id="adminTabNav" class="hidden flex gap-2 border-b border-slate-200 pb-3">
+                <button id="btnTabConsulta" onclick="switchAdminTab('consulta')" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4"></i> Consulta de Datos
+                </button>
+                <button id="btnTabUsuarios" onclick="switchAdminTab('usuarios')" class="px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <i data-lucide="users" class="w-4 h-4"></i> Gestión de Usuarios Enlace
+                </button>
+            </div>
+
+            <!-- MODULO DE GESTIÓN DE USUARIOS (SÓLO SUPER ADMIN) -->
+            <div id="usersManagementSection" class="hidden space-y-6">
+                <!-- Crear / Editar Usuario Enlace -->
+                <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <i data-lucide="user-plus" class="w-4 h-4 text-blue-600"></i> Registrar Usuario Enlace en el Repositorio
+                    </h3>
+                    
+                    <form onsubmit="handleCreateUser(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nombre Completo</label>
+                                <input type="text" id="newFullName" required placeholder="Ej: Enlace Antioquia" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Usuario</label>
+                                <input type="text" id="newUsername" required placeholder="enlace_ant" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Contraseña</label>
+                                <input type="password" id="newPassword" required placeholder="••••••" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <!-- Permisos específicos por datos -->
+                        <div class="border-t pt-4 space-y-3">
+                            <p class="text-xs font-bold text-slate-800">Permisos de Acceso a Información (Filtros Asignados):</p>
+                            <p class="text-[11px] text-slate-500">Si no seleccionas ninguna opción en una categoría, el usuario podrá ver <strong>todas</strong> las opciones de esa categoría.</p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pt-1">
+                                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                                    <span class="font-bold text-slate-700 text-[11px] block border-b pb-1">Partidos Autorizados</span>
+                                    <div id="checkPartidosContainer" class="max-h-36 overflow-y-auto space-y-1"></div>
+                                </div>
+
+                                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                                    <span class="font-bold text-slate-700 text-[11px] block border-b pb-1">Comisiones Autorizadas</span>
+                                    <div id="checkComisionesContainer" class="max-h-36 overflow-y-auto space-y-1"></div>
+                                </div>
+
+                                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                                    <span class="font-bold text-slate-700 text-[11px] block border-b pb-1">Departamentos Autorizados</span>
+                                    <div id="checkDeptosContainer" class="max-h-36 overflow-y-auto space-y-1"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" id="btnSaveUser" class="py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2">
+                            <span>Guardar Usuario en Google Sheets</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tabla de Usuarios Registrados -->
+                <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                    <h3 class="font-bold text-sm text-slate-800">Usuarios Registrados en la Base de Datos</h3>
+                    <div id="usersTableContainer" class="overflow-x-auto"></div>
+                </div>
+            </div>
+
+            <!-- MODULO DE REVISIÓN DE INFORMACIÓN -->
+            <div id="dataConsultationSection" class="space-y-6">
+
+                <div id="loadingAlert" class="bg-blue-50/80 border border-blue-200 text-blue-900 rounded-2xl p-8 text-center shadow-sm">
+                    <i data-lucide="refresh-cw" class="w-8 h-8 mx-auto text-blue-600 mb-3 animate-spin"></i>
+                    <h2 class="text-sm font-bold">Cargando base de datos desde Google Sheets...</h2>
+                </div>
+
+                <div id="consultationContent" class="hidden space-y-6">
+
+                    <!-- RESUMEN / KPIS -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Registros Permitidos</p>
+                                <h3 id="kpiTotal" class="text-2xl font-black text-slate-800 mt-0.5">0</h3>
+                            </div>
+                            <div class="p-3 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="users" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gobierno</p>
+                                <h3 id="kpiGobierno" class="text-2xl font-black text-emerald-600 mt-0.5">0</h3>
+                            </div>
+                            <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="check-circle-2" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Oposición</p>
+                                <h3 id="kpiOposicion" class="text-2xl font-black text-rose-600 mt-0.5">0</h3>
+                            </div>
+                            <div class="p-3 bg-rose-50 text-rose-600 rounded-xl"><i data-lucide="shield-alert" class="w-5 h-5"></i></div>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos Accesibles</p>
+                                <h3 id="kpiPartidos" class="text-2xl font-black text-indigo-600 mt-0.5">0</h3>
+                            </div>
+                            <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="flag" class="w-5 h-5"></i></div>
+                        </div>
+                    </div>
+
+                    <!-- BÚSQUEDA Y FILTROS -->
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                <i data-lucide="filter" class="w-4 h-4 text-blue-600"></i> Filtros de Búsqueda
+                            </span>
+                            <button onclick="resetFilters()" class="text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                                Limpiar Filtros
+                            </button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                            <input type="text" id="filterSearch" placeholder="Buscar nombre, causa..." class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none">
+                            <select id="filterDepartamento" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"><option value="">Todos los Departamentos</option></select>
+                            <select id="filterCorporacion" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"><option value="">Todas las Corporaciones</option></select>
+                            <select id="filterPartido" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"><option value="">Todos los Partidos</option></select>
+                            <select id="filterComision" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"><option value="">Todas las Comisiones</option></select>
+                        </div>
+                    </div>
+
+                    <!-- TARJETAS -->
+                    <div id="cardsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- MODAL DETALLE -->
+    <div id="detailModal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 backdrop-blur-sm z-50 overflow-y-auto">
+        <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] my-auto overflow-y-auto p-6 space-y-5 shadow-2xl relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            
+            <div id="modalBody"></div>
+
+            <div class="pt-2 border-t border-slate-100 flex justify-end">
+                <button id="downloadPdfBtn" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-md flex items-center gap-2">
+                    <i data-lucide="file-down" class="w-4 h-4"></i> Descargar Ficha PDF
+                </button>
+            </div>
+        </div>
     </div>
 
-    <script defer src="https://dev-cdn.minambiente.gov.co/geo-visor-cmp/v1/web-components-geovisor.js"></script>
-</body>
+    <script>
+        const SHEET_ID = "19AN5jRY6pIPeSruOk_zJq_rw-MQZpG8P";
+        const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
+        // PEGA AQUÍ LA URL DE TU DESPLIEGUE DE GOOGLE APPS SCRIPT
+        const USERS_API_URL = "PEGA_AQUI_TU_URL_DE_APPS_SCRIPT";
+
+        let rawData = [];
+        let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+
+        const DEFAULT_USERS = [
+            { 
+                id: 1, 
+                name: "Super Administrador", 
+                user: "admin", 
+                pass: "admin123", 
+                role: "SUPER_ADMIN",
+                permisos: { partidos: [], comisiones: [], departamentos: [] }
+            },
+            { 
+                id: 2, 
+                name: "Usuario Enlace Demo", 
+                user: "enlace", 
+                pass: "enlace123", 
+                role: "ENLACE",
+                permisos: { partidos: [], comisiones: [], departamentos: [] }
+            }
+        ];
+
+        let usersDB = [...DEFAULT_USERS];
+        const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>";
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadUsersFromSheet();
+            syncDataFromGoogleDrive();
+            updateSessionUI();
+            lucide.createIcons();
+        });
+
+        async function loadUsersFromSheet() {
+            if (!USERS_API_URL || USERS_API_URL.includes("PEGA_AQUI")) return;
+            try {
+                const res = await fetch(USERS_API_URL);
+                const remoteUsers = await res.json();
+                if (remoteUsers && remoteUsers.length > 0) {
+                    usersDB = [...DEFAULT_USERS, ...remoteUsers];
+                }
+            } catch (err) {
+                console.error("Error al cargar usuarios desde Google Sheets:", err);
+            }
+        }
+
+        function syncDataFromGoogleDrive() {
+            Papa.parse(SHEET_CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        rawData = results.data;
+                        document.getElementById('loadingAlert').classList.add('hidden');
+                        document.getElementById('consultationContent').classList.remove('hidden');
+                        populateAdminCheckboxes();
+                        if (currentUser) updateDashboardAndFilters();
+                    }
+                }
+            });
+        }
+
+        function updateSessionUI() {
+            const loginView = document.getElementById('loginView');
+            const authApp = document.getElementById('authenticatedApp');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const badge = document.getElementById('userSessionBadge');
+            const adminNav = document.getElementById('adminTabNav');
+
+            if (!currentUser) {
+                loginView.classList.remove('hidden');
+                authApp.classList.add('hidden');
+                logoutBtn.classList.add('hidden');
+                badge.innerText = "Estado: Sesión no iniciada";
+            } else {
+                loginView.classList.add('hidden');
+                authApp.classList.remove('hidden');
+                logoutBtn.classList.remove('hidden');
+                badge.innerText = `Sesión: ${currentUser.name} (${currentUser.role})`;
+
+                if (currentUser.role === 'SUPER_ADMIN') {
+                    adminNav.classList.remove('hidden');
+                } else {
+                    adminNav.classList.add('hidden');
+                    switchAdminTab('consulta');
+                }
+
+                if (rawData.length > 0) updateDashboardAndFilters();
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const u = document.getElementById('loginUser').value;
+            const p = document.getElementById('loginPass').value;
+
+            const found = usersDB.find(usr => usr.user === u && usr.pass === p);
+
+            if (found) {
+                currentUser = found;
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                document.getElementById('loginError').classList.add('hidden');
+                updateSessionUI();
+            } else {
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            updateSessionUI();
+        }
+
+        function switchAdminTab(tab) {
+            const dataSec = document.getElementById('dataConsultationSection');
+            const userSec = document.getElementById('usersManagementSection');
+            const btnConsulta = document.getElementById('btnTabConsulta');
+            const btnUsuarios = document.getElementById('btnTabUsuarios');
+
+            if (tab === 'consulta') {
+                dataSec.classList.remove('hidden');
+                userSec.classList.add('hidden');
+                btnConsulta.className = "px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2";
+                btnUsuarios.className = "px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2";
+            } else {
+                dataSec.classList.add('hidden');
+                userSec.classList.remove('hidden');
+                btnUsuarios.className = "px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2";
+                btnConsulta.className = "px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2";
+                renderUsersTable();
+            }
+        }
+
+        function populateAdminCheckboxes() {
+            const partidos = [...new Set(rawData.map(r => getField(r, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')).filter(Boolean))].sort();
+            const comisiones = [...new Set(rawData.map(r => getField(r, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION')).filter(Boolean))].sort();
+            const deptos = [...new Set(rawData.map(r => getField(r, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION')).filter(Boolean))].sort();
+
+            renderCheckboxList('checkPartidosContainer', partidos, 'permPartido');
+            renderCheckboxList('checkComisionesContainer', comisiones, 'permComision');
+            renderCheckboxList('checkDeptosContainer', deptos, 'permDepto');
+        }
+
+        function renderCheckboxList(containerId, list, prefix) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            list.forEach(item => {
+                container.innerHTML += `
+                    <label class="flex items-center gap-2 text-[11px] text-slate-700 hover:bg-slate-100 p-1 rounded">
+                        <input type="checkbox" value="${item}" class="${prefix} rounded text-blue-600">
+                        <span class="truncate">${item}</span>
+                    </label>
+                `;
+            });
+        }
+
+        async function handleCreateUser(e) {
+            e.preventDefault();
+            const btnSave = document.getElementById('btnSaveUser');
+            btnSave.disabled = true;
+            btnSave.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4 animate-spin"></i> Guardando en Google Sheets...`;
+            lucide.createIcons();
+
+            const name = document.getElementById('newFullName').value;
+            const user = document.getElementById('newUsername').value;
+            const pass = document.getElementById('newPassword').value;
+
+            const selectedPartidos = Array.from(document.querySelectorAll('.permPartido:checked')).map(cb => cb.value);
+            const selectedComisiones = Array.from(document.querySelectorAll('.permComision:checked')).map(cb => cb.value);
+            const selectedDeptos = Array.from(document.querySelectorAll('.permDepto:checked')).map(cb => cb.value);
+
+            const newUser = {
+                id: Date.now(),
+                name,
+                user,
+                pass,
+                role: 'ENLACE',
+                permisos: {
+                    partidos: selectedPartidos,
+                    comisiones: selectedComisiones,
+                    departamentos: selectedDeptos
+                }
+            };
+
+            if (USERS_API_URL && !USERS_API_URL.includes("PEGA_AQUI")) {
+                try {
+                    await fetch(USERS_API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'CREATE', user: newUser })
+                    });
+                } catch(e) {
+                    console.error("Error al enviar usuario:", e);
+                }
+            }
+
+            usersDB.push(newUser);
+
+            document.getElementById('newFullName').value = '';
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newPassword').value = '';
+            document.querySelectorAll('.permPartido, .permComision, .permDepto').forEach(cb => cb.checked = false);
+
+            btnSave.disabled = false;
+            btnSave.innerText = "Guardar Usuario en Google Sheets";
+            renderUsersTable();
+        }
+
+        function renderUsersTable() {
+            const container = document.getElementById('usersTableContainer');
+            let html = `
+                <table class="w-full text-left text-xs text-slate-600">
+                    <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                        <tr>
+                            <th class="p-2.5 rounded-l-lg">Nombre</th>
+                            <th class="p-2.5">Usuario</th>
+                            <th class="p-2.5">Partidos Perm.</th>
+                            <th class="p-2.5">Deptos. Perm.</th>
+                            <th class="p-2.5 text-right rounded-r-lg">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+            `;
+
+            usersDB.forEach(usr => {
+                const pText = usr.permisos && usr.permisos.partidos.length > 0 ? `${usr.permisos.partidos.length} sel.` : 'Todos';
+                const dText = usr.permisos && usr.permisos.departamentos.length > 0 ? `${usr.permisos.departamentos.length} sel.` : 'Todos';
+
+                html += `
+                    <tr>
+                        <td class="p-2.5 font-bold text-slate-800">${usr.name}</td>
+                        <td class="p-2.5">${usr.user}</td>
+                        <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-800">${pText}</span></td>
+                        <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-800">${dText}</span></td>
+                        <td class="p-2.5 text-right">
+                            ${(usr.user !== 'admin' && usr.user !== 'enlace') ? `<button onclick="deleteUser(${usr.id})" class="text-rose-600 hover:underline text-[11px]">Eliminar</button>` : '<span class="text-slate-300">Predeterminado</span>'}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        async function deleteUser(id) {
+            if (USERS_API_URL && !USERS_API_URL.includes("PEGA_AQUI")) {
+                try {
+                    await fetch(USERS_API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'DELETE', id: id })
+                    });
+                } catch (e) {
+                    console.error("Error borrando usuario remoto:", e);
+                }
+            }
+
+            usersDB = usersDB.filter(u => u.id !== id);
+            renderUsersTable();
+        }
+
+        function getField(item, ...keys) {
+            if (!item) return '';
+            for (let key of keys) {
+                if (item[key] !== undefined && item[key] !== null && String(item[key]).trim() !== '') {
+                    return String(item[key]).trim();
+                }
+            }
+            return '';
+        }
+
+        function getFilteredData() {
+            if (!currentUser) return [];
+
+            const isSuperAdmin = currentUser.role === 'SUPER_ADMIN';
+            const permPartidos = currentUser.permisos ? currentUser.permisos.partidos : [];
+            const permComisiones = currentUser.permisos ? currentUser.permisos.comisiones : [];
+            const permDeptos = currentUser.permisos ? currentUser.permisos.departamentos : [];
+
+            const search = document.getElementById('filterSearch').value.toLowerCase();
+            const depto = document.getElementById('filterDepartamento').value;
+            const corp = document.getElementById('filterCorporacion').value;
+            const partido = document.getElementById('filterPartido').value;
+            const comision = document.getElementById('filterComision').value;
+
+            return rawData.filter(item => {
+                const itemDepto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
+                const itemPartido = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
+                const itemComision = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
+
+                if (!isSuperAdmin) {
+                    if (permPartidos.length > 0 && !permPartidos.includes(itemPartido)) return false;
+                    if (permComisiones.length > 0 && !permComisiones.includes(itemComision)) return false;
+                    if (permDeptos.length > 0 && !permDeptos.includes(itemDepto)) return false;
+                }
+
+                const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE');
+                const causa = getField(item, 'CAUSAS POLITICAS', 'CAUSAS');
+                const matchesSearch = !search || name.toLowerCase().includes(search) || causa.toLowerCase().includes(search) || itemDepto.toLowerCase().includes(search);
+
+                const itemCorp = getField(item, 'CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION');
+
+                return matchesSearch &&
+                       (!depto || itemDepto === depto) &&
+                       (!corp || itemCorp === corp) &&
+                       (!partido || itemPartido === partido) &&
+                       (!comision || itemComision === comision);
+            });
+        }
+
+        function updateDashboardAndFilters() {
+            const filteredData = getFilteredData();
+
+            updateSelectOptions('filterDepartamento', ['DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION']);
+            updateSelectOptions('filterCorporacion', ['CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION']);
+            updateSelectOptions('filterPartido', ['PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO']);
+            updateSelectOptions('filterComision', ['COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION']);
+
+            document.getElementById('kpiTotal').innerText = filteredData.length;
+            document.getElementById('kpiGobierno').innerText = filteredData.filter(r => getField(r, 'POSICIÓN', 'POSICION').toUpperCase() === 'GOBIERNO').length;
+            document.getElementById('kpiOposicion').innerText = filteredData.filter(r => getField(r, 'POSICIÓN', 'POSICION').toUpperCase() === 'OPOSICIÓN').length;
+            document.getElementById('kpiPartidos').innerText = new Set(filteredData.map(r => getField(r, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')).filter(Boolean)).size;
+
+            renderCards(filteredData);
+        }
+
+        function updateSelectOptions(elementId, keys) {
+            const select = document.getElementById(elementId);
+            const currentValue = select.value;
+
+            const baseData = rawData.filter(item => {
+                if (currentUser.role === 'SUPER_ADMIN') return true;
+                const p = currentUser.permisos;
+                const itemP = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
+                const itemC = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
+                const itemD = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
+
+                if (p.partidos.length > 0 && !p.partidos.includes(itemP)) return false;
+                if (p.comisiones.length > 0 && !p.comisiones.includes(itemC)) return false;
+                if (p.departamentos.length > 0 && !p.departamentos.includes(itemD)) return false;
+                return true;
+            });
+
+            const uniqueOptions = [...new Set(baseData.map(item => getField(item, ...keys)).filter(Boolean))].sort();
+
+            const defaultLabels = {
+                'filterDepartamento': 'Todos los Departamentos',
+                'filterCorporacion': 'Todas las Corporaciones',
+                'filterPartido': 'Todos los Partidos',
+                'filterComision': 'Todas las Comisiones'
+            };
+
+            select.innerHTML = `<option value="">${defaultLabels[elementId]}</option>`;
+            uniqueOptions.forEach(opt => {
+                const selected = opt === currentValue ? 'selected' : '';
+                select.innerHTML += `<option value="${opt}" ${selected}>${opt}</option>`;
+            });
+        }
+
+        function processPhotoUrl(rawUrl) {
+            if (!rawUrl) return DEFAULT_AVATAR;
+            if (rawUrl.includes('drive.google.com')) {
+                let fileId = '';
+                const matchesD = rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                const matchesId = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                if (matchesD && matchesD[1]) fileId = matchesD[1];
+                else if (matchesId && matchesId[1]) fileId = matchesId[1];
+
+                if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+            }
+            return rawUrl;
+        }
+
+        function renderCards(filtered) {
+            const container = document.getElementById('cardsGrid');
+            container.innerHTML = '';
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 text-xs font-semibold">No se encontraron registros autorizados o coincidentes.</div>`;
+                return;
+            }
+
+            filtered.forEach((item) => {
+                const pos = getField(item, 'POSICIÓN', 'POSICION') || 'SIN DEFINIR';
+                let posColor = 'bg-slate-100 text-slate-700 border-slate-200';
+                if (pos.toUpperCase() === 'GOBIERNO') posColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                if (pos.toUpperCase() === 'OPOSICIÓN') posColor = 'bg-rose-50 text-rose-800 border-rose-200';
+
+                const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Sin Nombre';
+                const partido = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO') || 'Sin Partido';
+                const depto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION') || 'N/A';
+                
+                const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO');
+                const fotoUrl = processPhotoUrl(rawFoto);
+
+                const card = `
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-start gap-2 mb-3">
+                                <span class="text-[9px] uppercase font-bold px-2 py-0.5 rounded-md border ${posColor}">${pos}</span>
+                            </div>
+
+                            <div class="flex items-center gap-3">
+                                <img src="${fotoUrl}" crossorigin="anonymous" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-50">
+                                <div>
+                                    <h4 class="font-bold text-slate-900 text-sm leading-snug">${name}</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 text-xs text-slate-600 border-t pt-3 border-slate-100">
+                            <p class="flex items-center gap-2">
+                                <i data-lucide="flag" class="w-3.5 h-3.5 text-blue-500 shrink-0"></i> 
+                                <span class="truncate">Partido: <strong class="text-slate-800">${partido}</strong></span>
+                            </p>
+                            <p class="flex items-center gap-2">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i> 
+                                <span class="truncate">Depto: <strong class="text-slate-800">${depto}</strong></span>
+                            </p>
+                        </div>
+
+                        <button onclick="openModal(${rawData.indexOf(item)})" class="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors">
+                            Ver Detalles
+                        </button>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+
+            lucide.createIcons();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterSearch').value = '';
+            document.getElementById('filterDepartamento').value = '';
+            document.getElementById('filterCorporacion').value = '';
+            document.getElementById('filterPartido').value = '';
+            document.getElementById('filterComision').value = '';
+            updateDashboardAndFilters();
+        }
+
+        function openModal(index) {
+            const item = rawData[index];
+            const modalBody = document.getElementById('modalBody');
+
+            const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Congresista';
+            const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO');
+            const fotoUrl = processPhotoUrl(rawFoto);
+
+            const allKeys = Object.keys(item);
+            let dynamicFieldsHtml = '';
+            allKeys.forEach(key => {
+                const val = getField(item, key);
+                if (val) {
+                    dynamicFieldsHtml += `
+                        <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                            <span class="font-semibold text-slate-500 uppercase tracking-wider text-[10px] block">${key}</span>
+                            <span class="text-slate-800 font-medium">${val}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            modalBody.innerHTML = `
+                <div id="pdfContent" class="space-y-5 p-2">
+                    <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 border-b pb-4">
+                        <img src="${fotoUrl}" crossorigin="anonymous" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200 shadow-md shrink-0 bg-slate-50">
+                        <div class="text-center sm:text-left space-y-1">
+                            <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">${getField(item, 'CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION')}</span>
+                            <h2 class="text-xl font-black text-slate-900 leading-snug">${name}</h2>
+                            <p class="text-xs text-slate-600 font-semibold">${getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Información Detallada:</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                            ${dynamicFieldsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('downloadPdfBtn').onclick = () => downloadPDF(item);
+            document.getElementById('detailModal').classList.remove('hidden');
+            document.getElementById('detailModal').classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function downloadPDF(item) {
+            const element = document.getElementById('pdfContent');
+            const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Ficha';
+            
+            const opt = {
+                margin:       [0.4, 0.4, 0.4, 0.4],
+                filename:     `Ficha_${name.replace(/\s+/g, '_')}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+            document.getElementById('detailModal').classList.remove('flex');
+        }
+
+        ['filterSearch', 'filterDepartamento', 'filterCorporacion', 'filterPartido', 'filterComision'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateDashboardAndFilters);
+            document.getElementById(id).addEventListener('change', updateDashboardAndFilters);
+        });
+    </script>
+</body>
 </html>
