@@ -67,12 +67,11 @@
                 <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
                     <p class="font-bold text-slate-700">Cuentas por defecto:</p>
                     <p>• <strong>Super Admin:</strong> usuario <code>admin</code> / clave <code>admin123</code></p>
-                    <p>• <strong>Enlace Demo:</strong> usuario <code>enlace</code> / clave <code>enlace123</code></p>
                 </div>
             </div>
         </div>
 
-        <!-- 2. APARTADO PRINCIPAL (SOLO VISIBLE TRAS AUTENTICARSE) -->
+        <!-- 2. APARTADO PRINCIPAL -->
         <div id="authenticatedApp" class="hidden space-y-6">
 
             <!-- Pestañas para el Super Administrador -->
@@ -81,19 +80,25 @@
                     <i data-lucide="database" class="w-4 h-4"></i> Consulta de Datos
                 </button>
                 <button id="btnTabUsuarios" onclick="switchAdminTab('usuarios')" class="px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
-                    <i data-lucide="users" class="w-4 h-4"></i> Gestión de Usuarios Enlace
+                    <i data-lucide="users" class="w-4 h-4"></i> Gestión y Permisos de Usuarios
                 </button>
             </div>
 
-            <!-- MODULO DE GESTIÓN DE USUARIOS (SÓLO SUPER ADMIN) -->
+            <!-- MODULO DE GESTIÓN DE USUARIOS -->
             <div id="usersManagementSection" class="hidden space-y-6">
-                <!-- Crear / Editar Usuario Enlace -->
                 <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
-                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
-                        <i data-lucide="user-plus" class="w-4 h-4 text-blue-600"></i> Registrar Usuario Enlace en el Repositorio
-                    </h3>
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2" id="formUserTitle">
+                            <i data-lucide="user-plus" class="w-4 h-4 text-blue-600"></i> Registrar / Editar Usuario Enlace
+                        </h3>
+                        <button type="button" id="btnCancelEdit" onclick="cancelUserEdit()" class="hidden text-xs text-rose-600 font-bold hover:underline">
+                            Cancelar Edición
+                        </button>
+                    </div>
                     
-                    <form onsubmit="handleCreateUser(event)" class="space-y-4">
+                    <form onsubmit="handleCreateOrUpdateUser(event)" class="space-y-4">
+                        <input type="hidden" id="editingUserId" value="">
+                        
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nombre Completo</label>
@@ -111,8 +116,8 @@
 
                         <!-- Permisos específicos por datos -->
                         <div class="border-t pt-4 space-y-3">
-                            <p class="text-xs font-bold text-slate-800">Permisos de Acceso a Información (Filtros Asignados):</p>
-                            <p class="text-[11px] text-slate-500">Si no seleccionas ninguna opción en una categoría, el usuario podrá ver <strong>todas</strong> las opciones de esa categoría.</p>
+                            <p class="text-xs font-bold text-slate-800">Permisos de Acceso Independientes (Unión):</p>
+                            <p class="text-[11px] text-slate-500">Los permisos son <strong>aditivos e independientes</strong>. Si seleccionas el <em>Partido Liberal</em> y la <em>Comisión C1C</em>, el usuario verá a <strong>todos</strong> los miembros del Partido Liberal y a <strong>todos</strong> los de la C1C.</p>
 
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pt-1">
                                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
@@ -133,14 +138,13 @@
                         </div>
 
                         <button type="submit" id="btnSaveUser" class="py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2">
-                            <span>Guardar Usuario en Google Sheets</span>
+                            <span id="btnSaveUserText">Guardar Usuario</span>
                         </button>
                     </form>
                 </div>
 
-                <!-- Tabla de Usuarios Registrados -->
                 <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-                    <h3 class="font-bold text-sm text-slate-800">Usuarios Registrados en la Base de Datos</h3>
+                    <h3 class="font-bold text-sm text-slate-800">Usuarios Registrados y Sus Accesos</h3>
                     <div id="usersTableContainer" class="overflow-x-auto"></div>
                 </div>
             </div>
@@ -150,7 +154,7 @@
 
                 <div id="loadingAlert" class="bg-blue-50/80 border border-blue-200 text-blue-900 rounded-2xl p-8 text-center shadow-sm">
                     <i data-lucide="refresh-cw" class="w-8 h-8 mx-auto text-blue-600 mb-3 animate-spin"></i>
-                    <h2 class="text-sm font-bold">Cargando base de datos desde Google Sheets...</h2>
+                    <h2 class="text-sm font-bold">Sincronizando registros de la Base de Datos...</h2>
                 </div>
 
                 <div id="consultationContent" class="hidden space-y-6">
@@ -238,8 +242,10 @@
         const SHEET_ID = "19AN5jRY6pIPeSruOk_zJq_rw-MQZpG8P";
         const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
-        // PEGA AQUÍ LA URL DE TU DESPLIEGUE DE GOOGLE APPS SCRIPT
-        const USERS_API_URL = "PEGA_AQUI_TU_URL_DE_APPS_SCRIPT";
+        // ⚠️ PEGA AQUÍ LA URL COMPLETA DE TU DESPLIEGUE EN APPS SCRIPT
+        const USERS_API_URL = "https://script.google.com/macros/s/TU_SCRIPT_ID_AQUI/exec";
+
+        const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>";
 
         let rawData = [];
         let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
@@ -252,37 +258,41 @@
                 pass: "admin123", 
                 role: "SUPER_ADMIN",
                 permisos: { partidos: [], comisiones: [], departamentos: [] }
-            },
-            { 
-                id: 2, 
-                name: "Usuario Enlace Demo", 
-                user: "enlace", 
-                pass: "enlace123", 
-                role: "ENLACE",
-                permisos: { partidos: [], comisiones: [], departamentos: [] }
             }
         ];
 
-        let usersDB = [...DEFAULT_USERS];
-        const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>";
+        let usersDB = JSON.parse(localStorage.getItem('localUsersDB')) || [...DEFAULT_USERS];
 
         window.addEventListener('DOMContentLoaded', async () => {
-            await loadUsersFromSheet();
+            await syncUsersWithRemote();
             syncDataFromGoogleDrive();
             updateSessionUI();
             lucide.createIcons();
         });
 
-        async function loadUsersFromSheet() {
-            if (!USERS_API_URL || USERS_API_URL.includes("PEGA_AQUI")) return;
+        async function syncUsersWithRemote() {
+            if (!USERS_API_URL || USERS_API_URL.includes("TU_SCRIPT_ID")) return;
             try {
                 const res = await fetch(USERS_API_URL);
                 const remoteUsers = await res.json();
-                if (remoteUsers && remoteUsers.length > 0) {
-                    usersDB = [...DEFAULT_USERS, ...remoteUsers];
+                if (Array.isArray(remoteUsers) && remoteUsers.length > 0) {
+                    usersDB = [...DEFAULT_USERS];
+                    remoteUsers.forEach(ru => {
+                        if (ru.user !== 'admin') usersDB.push(ru);
+                    });
+                    localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
+                    
+                    // Si el usuario con sesión activa fue actualizado en remoto, refrescarlo
+                    if (currentUser) {
+                        const updatedSelf = usersDB.find(u => u.id === currentUser.id);
+                        if (updatedSelf) {
+                            currentUser = updatedSelf;
+                            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                        }
+                    }
                 }
             } catch (err) {
-                console.error("Error al cargar usuarios desde Google Sheets:", err);
+                console.error("Error cargando usuarios desde la nube:", err);
             }
         }
 
@@ -334,8 +344,8 @@
 
         function handleLogin(e) {
             e.preventDefault();
-            const u = document.getElementById('loginUser').value;
-            const p = document.getElementById('loginPass').value;
+            const u = document.getElementById('loginUser').value.trim();
+            const p = document.getElementById('loginPass').value.trim();
 
             const found = usersDB.find(usr => usr.user === u && usr.pass === p);
 
@@ -390,7 +400,7 @@
             container.innerHTML = '';
             list.forEach(item => {
                 container.innerHTML += `
-                    <label class="flex items-center gap-2 text-[11px] text-slate-700 hover:bg-slate-100 p-1 rounded">
+                    <label class="flex items-center gap-2 text-[11px] text-slate-700 hover:bg-slate-100 p-1 rounded cursor-pointer">
                         <input type="checkbox" value="${item}" class="${prefix} rounded text-blue-600">
                         <span class="truncate">${item}</span>
                     </label>
@@ -398,23 +408,24 @@
             });
         }
 
-        async function handleCreateUser(e) {
+        async function handleCreateOrUpdateUser(e) {
             e.preventDefault();
             const btnSave = document.getElementById('btnSaveUser');
-            btnSave.disabled = true;
-            btnSave.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4 animate-spin"></i> Guardando en Google Sheets...`;
-            lucide.createIcons();
+            const editingId = document.getElementById('editingUserId').value;
 
-            const name = document.getElementById('newFullName').value;
-            const user = document.getElementById('newUsername').value;
-            const pass = document.getElementById('newPassword').value;
+            btnSave.disabled = true;
+            document.getElementById('btnSaveUserText').innerText = "Procesando...";
+
+            const name = document.getElementById('newFullName').value.trim();
+            const user = document.getElementById('newUsername').value.trim();
+            const pass = document.getElementById('newPassword').value.trim();
 
             const selectedPartidos = Array.from(document.querySelectorAll('.permPartido:checked')).map(cb => cb.value);
             const selectedComisiones = Array.from(document.querySelectorAll('.permComision:checked')).map(cb => cb.value);
             const selectedDeptos = Array.from(document.querySelectorAll('.permDepto:checked')).map(cb => cb.value);
 
-            const newUser = {
-                id: Date.now(),
+            const userObj = {
+                id: editingId ? Number(editingId) : Date.now(),
                 name,
                 user,
                 pass,
@@ -426,29 +437,72 @@
                 }
             };
 
-            if (USERS_API_URL && !USERS_API_URL.includes("PEGA_AQUI")) {
+            // 1. Guardar en Memoria Local para persistencia instantánea
+            if (editingId) {
+                const idx = usersDB.findIndex(u => u.id === Number(editingId));
+                if (idx !== -1) usersDB[idx] = userObj;
+            } else {
+                usersDB.push(userObj);
+            }
+            localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
+
+            if (currentUser && currentUser.id === userObj.id) {
+                currentUser = userObj;
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            }
+
+            // 2. Persistir en Google Apps Script
+            if (USERS_API_URL && !USERS_API_URL.includes("TU_SCRIPT_ID")) {
                 try {
                     await fetch(USERS_API_URL, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'CREATE', user: newUser })
+                        body: JSON.stringify({ action: editingId ? 'UPDATE' : 'CREATE', user: userObj })
                     });
                 } catch(e) {
-                    console.error("Error al enviar usuario:", e);
+                    console.error("Error sincronizando con Google Sheets:", e);
                 }
             }
 
-            usersDB.push(newUser);
+            cancelUserEdit();
+            btnSave.disabled = false;
+            document.getElementById('btnSaveUserText').innerText = "Guardar Usuario";
+            renderUsersTable();
+            updateDashboardAndFilters();
+        }
 
+        function editUser(id) {
+            const usr = usersDB.find(u => u.id === id);
+            if (!usr) return;
+
+            document.getElementById('editingUserId').value = usr.id;
+            document.getElementById('newFullName').value = usr.name;
+            document.getElementById('newUsername').value = usr.user;
+            document.getElementById('newPassword').value = usr.pass;
+
+            document.getElementById('formUserTitle').innerHTML = `<i data-lucide="edit" class="w-4 h-4 text-amber-600"></i> Editando Usuario: ${usr.name}`;
+            document.getElementById('btnSaveUserText').innerText = "Actualizar Permisos de Usuario";
+            document.getElementById('btnCancelEdit').classList.remove('hidden');
+
+            document.querySelectorAll('.permPartido').forEach(cb => cb.checked = usr.permisos?.partidos?.includes(cb.value));
+            document.querySelectorAll('.permComision').forEach(cb => cb.checked = usr.permisos?.comisiones?.includes(cb.value));
+            document.querySelectorAll('.permDepto').forEach(cb => cb.checked = usr.permisos?.departamentos?.includes(cb.value));
+
+            lucide.createIcons();
+        }
+
+        function cancelUserEdit() {
+            document.getElementById('editingUserId').value = '';
             document.getElementById('newFullName').value = '';
             document.getElementById('newUsername').value = '';
             document.getElementById('newPassword').value = '';
-            document.querySelectorAll('.permPartido, .permComision, .permDepto').forEach(cb => cb.checked = false);
+            document.getElementById('formUserTitle').innerHTML = `<i data-lucide="user-plus" class="w-4 h-4 text-blue-600"></i> Registrar / Editar Usuario Enlace`;
+            document.getElementById('btnSaveUserText').innerText = "Guardar Usuario";
+            document.getElementById('btnCancelEdit').classList.add('hidden');
 
-            btnSave.disabled = false;
-            btnSave.innerText = "Guardar Usuario en Google Sheets";
-            renderUsersTable();
+            document.querySelectorAll('.permPartido, .permComision, .permDepto').forEach(cb => cb.checked = false);
+            lucide.createIcons();
         }
 
         function renderUsersTable() {
@@ -460,25 +514,31 @@
                             <th class="p-2.5 rounded-l-lg">Nombre</th>
                             <th class="p-2.5">Usuario</th>
                             <th class="p-2.5">Partidos Perm.</th>
+                            <th class="p-2.5">Comisiones Perm.</th>
                             <th class="p-2.5">Deptos. Perm.</th>
-                            <th class="p-2.5 text-right rounded-r-lg">Acción</th>
+                            <th class="p-2.5 text-right rounded-r-lg">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
             `;
 
             usersDB.forEach(usr => {
-                const pText = usr.permisos && usr.permisos.partidos.length > 0 ? `${usr.permisos.partidos.length} sel.` : 'Todos';
-                const dText = usr.permisos && usr.permisos.departamentos.length > 0 ? `${usr.permisos.departamentos.length} sel.` : 'Todos';
+                const pText = usr.permisos && usr.permisos.partidos?.length > 0 ? `${usr.permisos.partidos.length} sel.` : 'Sin restricción';
+                const cText = usr.permisos && usr.permisos.comisiones?.length > 0 ? `${usr.permisos.comisiones.length} sel.` : 'Sin restricción';
+                const dText = usr.permisos && usr.permisos.departamentos?.length > 0 ? `${usr.permisos.departamentos.length} sel.` : 'Sin restricción';
 
                 html += `
                     <tr>
                         <td class="p-2.5 font-bold text-slate-800">${usr.name}</td>
                         <td class="p-2.5">${usr.user}</td>
                         <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-800">${pText}</span></td>
+                        <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-800">${cText}</span></td>
                         <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-800">${dText}</span></td>
-                        <td class="p-2.5 text-right">
-                            ${(usr.user !== 'admin' && usr.user !== 'enlace') ? `<button onclick="deleteUser(${usr.id})" class="text-rose-600 hover:underline text-[11px]">Eliminar</button>` : '<span class="text-slate-300">Predeterminado</span>'}
+                        <td class="p-2.5 text-right space-x-2">
+                            ${(usr.user !== 'admin') ? `
+                                <button onclick="editUser(${usr.id})" class="text-blue-600 hover:underline text-[11px] font-bold">Editar</button>
+                                <button onclick="deleteUser(${usr.id})" class="text-rose-600 hover:underline text-[11px]">Eliminar</button>
+                            ` : '<span class="text-slate-300">Super Admin</span>'}
                         </td>
                     </tr>
                 `;
@@ -489,7 +549,10 @@
         }
 
         async function deleteUser(id) {
-            if (USERS_API_URL && !USERS_API_URL.includes("PEGA_AQUI")) {
+            usersDB = usersDB.filter(u => u.id !== id);
+            localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
+
+            if (USERS_API_URL && !USERS_API_URL.includes("TU_SCRIPT_ID")) {
                 try {
                     await fetch(USERS_API_URL, {
                         method: 'POST',
@@ -498,11 +561,10 @@
                         body: JSON.stringify({ action: 'DELETE', id: id })
                     });
                 } catch (e) {
-                    console.error("Error borrando usuario remoto:", e);
+                    console.error("Error borrando usuario en Google Sheets:", e);
                 }
             }
 
-            usersDB = usersDB.filter(u => u.id !== id);
             renderUsersTable();
         }
 
@@ -516,35 +578,49 @@
             return '';
         }
 
+        // LÓGICA DE PERMISOS INDEPENDIENTES (UNIÓN / LÓGICA "O")
         function getFilteredData() {
             if (!currentUser) return [];
 
             const isSuperAdmin = currentUser.role === 'SUPER_ADMIN';
-            const permPartidos = currentUser.permisos ? currentUser.permisos.partidos : [];
-            const permComisiones = currentUser.permisos ? currentUser.permisos.comisiones : [];
-            const permDeptos = currentUser.permisos ? currentUser.permisos.departamentos : [];
+            const permPartidos = currentUser.permisos ? currentUser.permisos.partidos || [] : [];
+            const permComisiones = currentUser.permisos ? currentUser.permisos.comisiones || [] : [];
+            const permDeptos = currentUser.permisos ? currentUser.permisos.departamentos || [] : [];
 
-            const search = document.getElementById('filterSearch').value.toLowerCase();
-            const depto = document.getElementById('filterDepartamento').value;
-            const corp = document.getElementById('filterCorporacion').value;
-            const partido = document.getElementById('filterPartido').value;
-            const comision = document.getElementById('filterComision').value;
+            const hasPartidosFilter = permPartidos.length > 0;
+            const hasComisionesFilter = permComisiones.length > 0;
+            const hasDeptosFilter = permDeptos.length > 0;
+
+            const search = (document.getElementById('filterSearch')?.value || '').toLowerCase();
+            const depto = document.getElementById('filterDepartamento')?.value || '';
+            const corp = document.getElementById('filterCorporacion')?.value || '';
+            const partido = document.getElementById('filterPartido')?.value || '';
+            const comision = document.getElementById('filterComision')?.value || '';
 
             return rawData.filter(item => {
-                const itemDepto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
                 const itemPartido = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
                 const itemComision = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
+                const itemDepto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
 
+                // Aplicación de permisos aditivos/independientes
                 if (!isSuperAdmin) {
-                    if (permPartidos.length > 0 && !permPartidos.includes(itemPartido)) return false;
-                    if (permComisiones.length > 0 && !permComisiones.includes(itemComision)) return false;
-                    if (permDeptos.length > 0 && !permDeptos.includes(itemDepto)) return false;
+                    const hasAnyFilterAssigned = hasPartidosFilter || hasComisionesFilter || hasDeptosFilter;
+
+                    if (hasAnyFilterAssigned) {
+                        const matchPartido = hasPartidosFilter && permPartidos.includes(itemPartido);
+                        const matchComision = hasComisionesFilter && permComisiones.includes(itemComision);
+                        const matchDepto = hasDeptosFilter && permDeptos.includes(itemDepto);
+
+                        if (!(matchPartido || matchComision || matchDepto)) {
+                            return false;
+                        }
+                    }
                 }
 
+                // Filtros generales de la interfaz
                 const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE');
                 const causa = getField(item, 'CAUSAS POLITICAS', 'CAUSAS');
                 const matchesSearch = !search || name.toLowerCase().includes(search) || causa.toLowerCase().includes(search) || itemDepto.toLowerCase().includes(search);
-
                 const itemCorp = getField(item, 'CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION');
 
                 return matchesSearch &&
@@ -577,15 +653,17 @@
 
             const baseData = rawData.filter(item => {
                 if (currentUser.role === 'SUPER_ADMIN') return true;
-                const p = currentUser.permisos;
+                const p = currentUser.permisos || {};
                 const itemP = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
                 const itemC = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
                 const itemD = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
 
-                if (p.partidos.length > 0 && !p.partidos.includes(itemP)) return false;
-                if (p.comisiones.length > 0 && !p.comisiones.includes(itemC)) return false;
-                if (p.departamentos.length > 0 && !p.departamentos.includes(itemD)) return false;
-                return true;
+                const hp = p.partidos?.length > 0;
+                const hc = p.comisiones?.length > 0;
+                const hd = p.departamentos?.length > 0;
+
+                if (!hp && !hc && !hd) return true;
+                return (hp && p.partidos.includes(itemP)) || (hc && p.comisiones.includes(itemC)) || (hd && p.departamentos.includes(itemD));
             });
 
             const uniqueOptions = [...new Set(baseData.map(item => getField(item, ...keys)).filter(Boolean))].sort();
@@ -604,18 +682,22 @@
             });
         }
 
+        // CONTROL Y CONVERSIÓN DE FOTOS DE GOOGLE DRIVE Y ENLACES
         function processPhotoUrl(rawUrl) {
-            if (!rawUrl) return DEFAULT_AVATAR;
-            if (rawUrl.includes('drive.google.com')) {
+            if (!rawUrl || typeof rawUrl !== 'string') return DEFAULT_AVATAR;
+            let trimmed = rawUrl.trim();
+            if (trimmed === "" || trimmed.toLowerCase() === "n/a") return DEFAULT_AVATAR;
+
+            if (trimmed.includes('drive.google.com')) {
                 let fileId = '';
-                const matchesD = rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                const matchesId = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                const matchesD = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                const matchesId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
                 if (matchesD && matchesD[1]) fileId = matchesD[1];
                 else if (matchesId && matchesId[1]) fileId = matchesId[1];
 
                 if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
             }
-            return rawUrl;
+            return trimmed;
         }
 
         function renderCards(filtered) {
@@ -648,7 +730,7 @@
                             </div>
 
                             <div class="flex items-center gap-3">
-                                <img src="${fotoUrl}" crossorigin="anonymous" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-50">
+                                <img src="${fotoUrl}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="${name}" class="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-50">
                                 <div>
                                     <h4 class="font-bold text-slate-900 text-sm leading-snug">${name}</h4>
                                 </div>
@@ -711,7 +793,7 @@
             modalBody.innerHTML = `
                 <div id="pdfContent" class="space-y-5 p-2">
                     <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 border-b pb-4">
-                        <img src="${fotoUrl}" crossorigin="anonymous" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200 shadow-md shrink-0 bg-slate-50">
+                        <img src="${fotoUrl}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-24 h-24 rounded-2xl object-cover border-2 border-slate-200 shadow-md shrink-0 bg-slate-50">
                         <div class="text-center sm:text-left space-y-1">
                             <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">${getField(item, 'CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION')}</span>
                             <h2 class="text-xl font-black text-slate-900 leading-snug">${name}</h2>
@@ -755,8 +837,11 @@
         }
 
         ['filterSearch', 'filterDepartamento', 'filterCorporacion', 'filterPartido', 'filterComision'].forEach(id => {
-            document.getElementById(id).addEventListener('input', updateDashboardAndFilters);
-            document.getElementById(id).addEventListener('change', updateDashboardAndFilters);
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.addEventListener('input', updateDashboardAndFilters);
+                elem.addEventListener('change', updateDashboardAndFilters);
+            }
         });
     </script>
 </body>
