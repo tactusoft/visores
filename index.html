@@ -12,6 +12,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Librería html2pdf.js para generación de PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Librería XLSX para exportación a Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 <body class="font-sans text-slate-800 min-h-full flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
@@ -24,7 +26,7 @@
                 </div>
                 <div>
                     <h1 class="text-base sm:text-lg font-bold">Sistema de Control Político</h1>
-                    <p class="text-slate-400 text-[11px]" id="userSessionBadge">Estado: Cargando repositorio...</p>
+                    <p class="text-slate-400 text-[11px]" id="userSessionBadge">Estado: Verificando sesión...</p>
                 </div>
             </div>
             
@@ -36,7 +38,7 @@
 
     <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex-1 w-full">
 
-        <!-- 1. PANTALLA DE ACCESO OBLIGATORIO (LOGIN) -->
+        <!-- 1. ACCESO (LOGIN) -->
         <div id="loginView" class="max-w-md mx-auto py-10 space-y-6">
             <div class="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-xl space-y-5">
                 <div class="text-center space-y-2">
@@ -44,7 +46,7 @@
                         <i data-lucide="lock" class="w-7 h-7"></i>
                     </div>
                     <h2 class="text-xl font-bold text-slate-900">Acceso Autenticado</h2>
-                    <p class="text-xs text-slate-500">Ingresa con tus credenciales de Super Administrador o Usuario Enlace para revisar la información.</p>
+                    <p class="text-xs text-slate-500">Ingresa con tus credenciales para revisar la información.</p>
                 </div>
 
                 <form onsubmit="handleLogin(event)" class="space-y-4">
@@ -114,10 +116,8 @@
                             </div>
                         </div>
 
-                        <!-- Permisos específicos por datos -->
                         <div class="border-t pt-4 space-y-3">
-                            <p class="text-xs font-bold text-slate-800">Permisos de Acceso Independientes (Unión):</p>
-                            <p class="text-[11px] text-slate-500">Los permisos son <strong>aditivos e independientes</strong>. Si seleccionas el <em>Partido Liberal</em> y la <em>Comisión C1C</em>, el usuario verá a <strong>todos</strong> los miembros del Partido Liberal y a <strong>todos</strong> los de la C1C.</p>
+                            <p class="text-xs font-bold text-slate-800">Permisos de Acceso Independientes:</p>
 
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pt-1">
                                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
@@ -144,7 +144,7 @@
                 </div>
 
                 <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-                    <h3 class="font-bold text-sm text-slate-800">Usuarios Registrados y Sus Accesos</h3>
+                    <h3 class="font-bold text-sm text-slate-800">Usuarios Registrados</h3>
                     <div id="usersTableContainer" class="overflow-x-auto"></div>
                 </div>
             </div>
@@ -153,8 +153,9 @@
             <div id="dataConsultationSection" class="space-y-6">
 
                 <div id="loadingAlert" class="bg-blue-50/80 border border-blue-200 text-blue-900 rounded-2xl p-8 text-center shadow-sm">
-                    <i data-lucide="refresh-cw" class="w-8 h-8 mx-auto text-blue-600 mb-3 animate-spin"></i>
-                    <h2 class="text-sm font-bold">Sincronizando registros de la Base de Datos...</h2>
+                    <i id="loadingSpinner" data-lucide="refresh-cw" class="w-8 h-8 mx-auto text-blue-600 mb-3 animate-spin"></i>
+                    <h2 class="text-sm font-bold" id="loadingTitle">Cargando repositorios...</h2>
+                    <p class="text-xs text-slate-500 mt-1" id="loadingSubtext">Obteniendo datos actualizados.</p>
                 </div>
 
                 <div id="consultationContent" class="hidden space-y-6">
@@ -163,7 +164,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
                         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                             <div>
-                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Registros Permitidos</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Congresistas Registrados</p>
                                 <h3 id="kpiTotal" class="text-2xl font-black text-slate-800 mt-0.5">0</h3>
                             </div>
                             <div class="p-3 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="users" class="w-5 h-5"></i></div>
@@ -184,7 +185,7 @@
                         </div>
                         <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                             <div>
-                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos Accesibles</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos</p>
                                 <h3 id="kpiPartidos" class="text-2xl font-black text-indigo-600 mt-0.5">0</h3>
                             </div>
                             <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="flag" class="w-5 h-5"></i></div>
@@ -193,13 +194,20 @@
 
                     <!-- BÚSQUEDA Y FILTROS -->
                     <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-                        <div class="flex justify-between items-center">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                             <span class="text-xs font-bold text-slate-800 flex items-center gap-2">
                                 <i data-lucide="filter" class="w-4 h-4 text-blue-600"></i> Filtros de Búsqueda
                             </span>
-                            <button onclick="resetFilters()" class="text-xs text-blue-600 hover:text-blue-800 font-semibold">
-                                Limpiar Filtros
-                            </button>
+                            
+                            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                <button id="btnExportExcel" onclick="exportDirectoryExcel()" class="hidden px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5">
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar Excel
+                                </button>
+
+                                <button onclick="resetFilters()" class="text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                                    Limpiar Filtros
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
@@ -211,8 +219,26 @@
                         </div>
                     </div>
 
-                    <!-- TARJETAS -->
-                    <div id="cardsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    <!-- SECCIÓN MESA DIRECTIVA -->
+                    <div id="mesaDirectivaSection" class="hidden space-y-4 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 rounded-3xl border border-amber-300/60 shadow-sm transition-all">
+                        <div class="flex items-center justify-between border-b border-amber-200/80 pb-3">
+                            <div class="flex items-center gap-2.5 text-amber-900 font-extrabold text-xs uppercase tracking-wide">
+                                <div class="p-1.5 bg-amber-500 text-white rounded-lg shadow-sm">
+                                    <i data-lucide="award" class="w-4 h-4"></i>
+                                </div>
+                                <span>Mesa Directiva</span>
+                            </div>
+                            <span id="mesaDirectivaBadge" class="text-[10px] font-bold px-2.5 py-1 bg-amber-100 text-amber-900 rounded-full border border-amber-300">0 Registros</span>
+                        </div>
+                        
+                        <div id="mesaDirectivaGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                    </div>
+
+                    <!-- LISTADO GENERAL DE CONGRESISTAS -->
+                    <div>
+                        <h3 id="sectionTitleCongresistas" class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Integrantes del Congreso</h3>
+                        <div id="cardsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    </div>
 
                 </div>
             </div>
@@ -239,16 +265,40 @@
     </div>
 
     <script>
-        const SHEET_ID = "19AN5jRY6pIPeSruOk_zJq_rw-MQZpG8P";
-        const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+        const GOOGLE_SHEETS_URL_1 = "https://docs.google.com/spreadsheets/d/1fSG5OVPkFuiA5_3I65YdpD4uI6toI_AR/edit?usp=share_link&ouid=110569040695353345281&rtpof=true&sd=true";
+        const SHEET_NAME_1 = "Hoja 1";
 
-        // ⚠️ PEGA AQUÍ LA URL COMPLETA DE TU DESPLIEGUE EN APPS SCRIPT
-        const USERS_API_URL = "https://script.google.com/macros/s/TU_SCRIPT_ID_AQUI/exec";
+        const GOOGLE_SHEETS_URL_2 = "https://docs.google.com/spreadsheets/d/1uGMfTlplvOnT1WSiE3XcHyR8WdHASMji/edit?usp=share_link&ouid=110569040695353345281&rtpof=true&sd=true";
+        const SHEET_NAME_2 = "Hoja 1";
+
+        const PARTIDO_KEYS = ['PARTIDO DE LA CURUL (COALICION)', 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO'];
+
+        function getGoogleSheetsCsvUrl(url, sheetName) {
+            try {
+                const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                if (match && match[1]) {
+                    const sheetId = match[1];
+                    const encodedSheet = encodeURIComponent(sheetName);
+                    return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodedSheet}&_t=${Date.now()}`;
+                }
+            } catch (e) {
+                console.error("Error procesando URL:", e);
+            }
+            return url;
+        }
 
         const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>";
 
         let rawData = [];
-        let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+        let rawMesaDirectiva = [];
+        
+        // Cargar usuario persistido en localStorage
+        let currentUser = null;
+        try {
+            currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+        } catch (e) {
+            currentUser = null;
+        }
 
         const DEFAULT_USERS = [
             { 
@@ -263,54 +313,73 @@
 
         let usersDB = JSON.parse(localStorage.getItem('localUsersDB')) || [...DEFAULT_USERS];
 
-        window.addEventListener('DOMContentLoaded', async () => {
-            await syncUsersWithRemote();
-            syncDataFromGoogleDrive();
+        // Se ejecuta inmediamente cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', () => {
             updateSessionUI();
-            lucide.createIcons();
+            syncDataFromCsvSource();
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
         });
 
-        async function syncUsersWithRemote() {
-            if (!USERS_API_URL || USERS_API_URL.includes("TU_SCRIPT_ID")) return;
-            try {
-                const res = await fetch(USERS_API_URL);
-                const remoteUsers = await res.json();
-                if (Array.isArray(remoteUsers) && remoteUsers.length > 0) {
-                    usersDB = [...DEFAULT_USERS];
-                    remoteUsers.forEach(ru => {
-                        if (ru.user !== 'admin') usersDB.push(ru);
-                    });
-                    localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
-                    
-                    // Si el usuario con sesión activa fue actualizado en remoto, refrescarlo
-                    if (currentUser) {
-                        const updatedSelf = usersDB.find(u => u.id === currentUser.id);
-                        if (updatedSelf) {
-                            currentUser = updatedSelf;
-                            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Error cargando usuarios desde la nube:", err);
-            }
-        }
+        function syncDataFromCsvSource() {
+            const csvUrl1 = getGoogleSheetsCsvUrl(GOOGLE_SHEETS_URL_1, SHEET_NAME_1);
+            const csvUrl2 = getGoogleSheetsCsvUrl(GOOGLE_SHEETS_URL_2, SHEET_NAME_2);
 
-        function syncDataFromGoogleDrive() {
-            Papa.parse(SHEET_CSV_URL, {
+            let loaded1 = false;
+            let loaded2 = false;
+
+            Papa.parse(csvUrl1, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
                     if (results.data && results.data.length > 0) {
-                        rawData = results.data;
-                        document.getElementById('loadingAlert').classList.add('hidden');
-                        document.getElementById('consultationContent').classList.remove('hidden');
-                        populateAdminCheckboxes();
-                        if (currentUser) updateDashboardAndFilters();
+                        rawData = results.data.filter(row => Object.keys(row).some(k => row[k] !== ""));
                     }
+                    loaded1 = true;
+                    checkAllLoaded();
+                },
+                error: function(err) {
+                    console.error("Error al cargar repositorios principales:", err);
+                    loaded1 = true;
+                    checkAllLoaded();
                 }
             });
+
+            Papa.parse(csvUrl2, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        rawMesaDirectiva = results.data.filter(row => Object.keys(row).some(k => row[k] !== ""));
+                    }
+                    loaded2 = true;
+                    checkAllLoaded();
+                },
+                error: function(err) {
+                    console.error("Error al cargar repositorios de Mesa Directiva:", err);
+                    loaded2 = true;
+                    checkAllLoaded();
+                }
+            });
+
+            function checkAllLoaded() {
+                if (loaded1 && loaded2) {
+                    const loadingAlert = document.getElementById('loadingAlert');
+                    const consultationContent = document.getElementById('consultationContent');
+                    if (loadingAlert) loadingAlert.classList.add('hidden');
+                    if (consultationContent) consultationContent.classList.remove('hidden');
+                    
+                    populateAdminCheckboxes();
+                    
+                    // Si hay sesión activa, renderizar los datos
+                    if (currentUser) {
+                        updateDashboardAndFilters();
+                    }
+                }
+            }
         }
 
         function updateSessionUI() {
@@ -319,13 +388,16 @@
             const logoutBtn = document.getElementById('logoutBtn');
             const badge = document.getElementById('userSessionBadge');
             const adminNav = document.getElementById('adminTabNav');
+            const btnExport = document.getElementById('btnExportExcel');
 
             if (!currentUser) {
+                // Sin sesión: Mostrar pantalla de login y ocultar app
                 loginView.classList.remove('hidden');
                 authApp.classList.add('hidden');
                 logoutBtn.classList.add('hidden');
                 badge.innerText = "Estado: Sesión no iniciada";
             } else {
+                // Sesión activa: Ocultar login y mostrar dashboard
                 loginView.classList.add('hidden');
                 authApp.classList.remove('hidden');
                 logoutBtn.classList.remove('hidden');
@@ -333,12 +405,16 @@
 
                 if (currentUser.role === 'SUPER_ADMIN') {
                     adminNav.classList.remove('hidden');
+                    btnExport.classList.remove('hidden');
                 } else {
                     adminNav.classList.add('hidden');
+                    btnExport.classList.add('hidden');
                     switchAdminTab('consulta');
                 }
 
-                if (rawData.length > 0) updateDashboardAndFilters();
+                if (rawData.length > 0) {
+                    updateDashboardAndFilters();
+                }
             }
         }
 
@@ -351,6 +427,7 @@
 
             if (found) {
                 currentUser = found;
+                // Guardar usuario de manera explícita en localStorage
                 localStorage.setItem('currentUser', JSON.stringify(currentUser));
                 document.getElementById('loginError').classList.add('hidden');
                 updateSessionUI();
@@ -361,6 +438,7 @@
 
         function handleLogout() {
             currentUser = null;
+            // Eliminar únicamente cuando el usuario haga clic en 'Cerrar Sesión'
             localStorage.removeItem('currentUser');
             updateSessionUI();
         }
@@ -386,7 +464,7 @@
         }
 
         function populateAdminCheckboxes() {
-            const partidos = [...new Set(rawData.map(r => getField(r, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')).filter(Boolean))].sort();
+            const partidos = [...new Set(rawData.map(r => getField(r, ...PARTIDO_KEYS)).filter(Boolean))].sort();
             const comisiones = [...new Set(rawData.map(r => getField(r, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION')).filter(Boolean))].sort();
             const deptos = [...new Set(rawData.map(r => getField(r, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION')).filter(Boolean))].sort();
 
@@ -397,6 +475,7 @@
 
         function renderCheckboxList(containerId, list, prefix) {
             const container = document.getElementById(containerId);
+            if (!container) return;
             container.innerHTML = '';
             list.forEach(item => {
                 container.innerHTML += `
@@ -410,11 +489,7 @@
 
         async function handleCreateOrUpdateUser(e) {
             e.preventDefault();
-            const btnSave = document.getElementById('btnSaveUser');
             const editingId = document.getElementById('editingUserId').value;
-
-            btnSave.disabled = true;
-            document.getElementById('btnSaveUserText').innerText = "Procesando...";
 
             const name = document.getElementById('newFullName').value.trim();
             const user = document.getElementById('newUsername').value.trim();
@@ -437,7 +512,6 @@
                 }
             };
 
-            // 1. Guardar en Memoria Local para persistencia instantánea
             if (editingId) {
                 const idx = usersDB.findIndex(u => u.id === Number(editingId));
                 if (idx !== -1) usersDB[idx] = userObj;
@@ -446,50 +520,9 @@
             }
             localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
 
-            if (currentUser && currentUser.id === userObj.id) {
-                currentUser = userObj;
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            }
-
-            // 2. Persistir en Google Apps Script
-            if (USERS_API_URL && !USERS_API_URL.includes("TU_SCRIPT_ID")) {
-                try {
-                    await fetch(USERS_API_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: editingId ? 'UPDATE' : 'CREATE', user: userObj })
-                    });
-                } catch(e) {
-                    console.error("Error sincronizando con Google Sheets:", e);
-                }
-            }
-
             cancelUserEdit();
-            btnSave.disabled = false;
-            document.getElementById('btnSaveUserText').innerText = "Guardar Usuario";
             renderUsersTable();
             updateDashboardAndFilters();
-        }
-
-        function editUser(id) {
-            const usr = usersDB.find(u => u.id === id);
-            if (!usr) return;
-
-            document.getElementById('editingUserId').value = usr.id;
-            document.getElementById('newFullName').value = usr.name;
-            document.getElementById('newUsername').value = usr.user;
-            document.getElementById('newPassword').value = usr.pass;
-
-            document.getElementById('formUserTitle').innerHTML = `<i data-lucide="edit" class="w-4 h-4 text-amber-600"></i> Editando Usuario: ${usr.name}`;
-            document.getElementById('btnSaveUserText').innerText = "Actualizar Permisos de Usuario";
-            document.getElementById('btnCancelEdit').classList.remove('hidden');
-
-            document.querySelectorAll('.permPartido').forEach(cb => cb.checked = usr.permisos?.partidos?.includes(cb.value));
-            document.querySelectorAll('.permComision').forEach(cb => cb.checked = usr.permisos?.comisiones?.includes(cb.value));
-            document.querySelectorAll('.permDepto').forEach(cb => cb.checked = usr.permisos?.departamentos?.includes(cb.value));
-
-            lucide.createIcons();
         }
 
         function cancelUserEdit() {
@@ -502,11 +535,12 @@
             document.getElementById('btnCancelEdit').classList.add('hidden');
 
             document.querySelectorAll('.permPartido, .permComision, .permDepto').forEach(cb => cb.checked = false);
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
         function renderUsersTable() {
             const container = document.getElementById('usersTableContainer');
+            if (!container) return;
             let html = `
                 <table class="w-full text-left text-xs text-slate-600">
                     <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
@@ -536,7 +570,6 @@
                         <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-800">${dText}</span></td>
                         <td class="p-2.5 text-right space-x-2">
                             ${(usr.user !== 'admin') ? `
-                                <button onclick="editUser(${usr.id})" class="text-blue-600 hover:underline text-[11px] font-bold">Editar</button>
                                 <button onclick="deleteUser(${usr.id})" class="text-rose-600 hover:underline text-[11px]">Eliminar</button>
                             ` : '<span class="text-slate-300">Super Admin</span>'}
                         </td>
@@ -548,37 +581,27 @@
             container.innerHTML = html;
         }
 
-        async function deleteUser(id) {
+        function deleteUser(id) {
             usersDB = usersDB.filter(u => u.id !== id);
             localStorage.setItem('localUsersDB', JSON.stringify(usersDB));
-
-            if (USERS_API_URL && !USERS_API_URL.includes("TU_SCRIPT_ID")) {
-                try {
-                    await fetch(USERS_API_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'DELETE', id: id })
-                    });
-                } catch (e) {
-                    console.error("Error borrando usuario en Google Sheets:", e);
-                }
-            }
-
             renderUsersTable();
         }
 
         function getField(item, ...keys) {
             if (!item) return '';
-            for (let key of keys) {
-                if (item[key] !== undefined && item[key] !== null && String(item[key]).trim() !== '') {
-                    return String(item[key]).trim();
+            const normalizedKeys = keys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
+            
+            for (let itemKey of Object.keys(item)) {
+                const normItemKey = itemKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (normalizedKeys.includes(normItemKey)) {
+                    if (item[itemKey] !== undefined && item[itemKey] !== null && String(item[itemKey]).trim() !== '') {
+                        return String(item[itemKey]).trim();
+                    }
                 }
             }
             return '';
         }
 
-        // LÓGICA DE PERMISOS INDEPENDIENTES (UNIÓN / LÓGICA "O")
         function getFilteredData() {
             if (!currentUser) return [];
 
@@ -587,10 +610,6 @@
             const permComisiones = currentUser.permisos ? currentUser.permisos.comisiones || [] : [];
             const permDeptos = currentUser.permisos ? currentUser.permisos.departamentos || [] : [];
 
-            const hasPartidosFilter = permPartidos.length > 0;
-            const hasComisionesFilter = permComisiones.length > 0;
-            const hasDeptosFilter = permDeptos.length > 0;
-
             const search = (document.getElementById('filterSearch')?.value || '').toLowerCase();
             const depto = document.getElementById('filterDepartamento')?.value || '';
             const corp = document.getElementById('filterCorporacion')?.value || '';
@@ -598,26 +617,20 @@
             const comision = document.getElementById('filterComision')?.value || '';
 
             return rawData.filter(item => {
-                const itemPartido = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
+                const itemPartido = getField(item, ...PARTIDO_KEYS);
                 const itemComision = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
                 const itemDepto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
 
-                // Aplicación de permisos aditivos/independientes
                 if (!isSuperAdmin) {
-                    const hasAnyFilterAssigned = hasPartidosFilter || hasComisionesFilter || hasDeptosFilter;
-
+                    const hasAnyFilterAssigned = permPartidos.length > 0 || permComisiones.length > 0 || permDeptos.length > 0;
                     if (hasAnyFilterAssigned) {
-                        const matchPartido = hasPartidosFilter && permPartidos.includes(itemPartido);
-                        const matchComision = hasComisionesFilter && permComisiones.includes(itemComision);
-                        const matchDepto = hasDeptosFilter && permDeptos.includes(itemDepto);
-
-                        if (!(matchPartido || matchComision || matchDepto)) {
-                            return false;
-                        }
+                        const matchPartido = permPartidos.length > 0 && permPartidos.includes(itemPartido);
+                        const matchComision = permComisiones.length > 0 && permComisiones.includes(itemComision);
+                        const matchDepto = permDeptos.length > 0 && permDeptos.includes(itemDepto);
+                        if (!(matchPartido || matchComision || matchDepto)) return false;
                     }
                 }
 
-                // Filtros generales de la interfaz
                 const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE');
                 const causa = getField(item, 'CAUSAS POLITICAS', 'CAUSAS');
                 const matchesSearch = !search || name.toLowerCase().includes(search) || causa.toLowerCase().includes(search) || itemDepto.toLowerCase().includes(search);
@@ -631,42 +644,56 @@
             });
         }
 
+        function getFilteredMesaDirectiva() {
+            const corpSelected = document.getElementById('filterCorporacion')?.value || '';
+            const comisionSelected = document.getElementById('filterComision')?.value || '';
+
+            if (!corpSelected && !comisionSelected) {
+                return [];
+            }
+
+            return rawMesaDirectiva.filter(item => {
+                const valCorpCom = getField(item, 'CORPORACION/COMISION', 'CORPORACION / COMISION', 'COMISION', 'CORPORACION', 'CORP/COM');
+
+                let matchCorp = true;
+                let matchCom = true;
+
+                if (corpSelected) {
+                    matchCorp = valCorpCom.toLowerCase().includes(corpSelected.toLowerCase());
+                }
+
+                if (comisionSelected) {
+                    matchCom = valCorpCom.toLowerCase().includes(comisionSelected.toLowerCase());
+                }
+
+                return matchCorp && matchCom;
+            });
+        }
+
         function updateDashboardAndFilters() {
             const filteredData = getFilteredData();
 
-            updateSelectOptions('filterDepartamento', ['DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION']);
-            updateSelectOptions('filterCorporacion', ['CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION']);
-            updateSelectOptions('filterPartido', ['PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO']);
-            updateSelectOptions('filterComision', ['COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION']);
+            updateSelectOptionsFromBase1('filterDepartamento', ['DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION']);
+            updateSelectOptionsFromBase1('filterCorporacion', ['CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION']);
+            updateSelectOptionsFromBase1('filterPartido', PARTIDO_KEYS);
+            updateSelectOptionsFromBase1('filterComision', ['COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION']);
 
             document.getElementById('kpiTotal').innerText = filteredData.length;
             document.getElementById('kpiGobierno').innerText = filteredData.filter(r => getField(r, 'POSICIÓN', 'POSICION').toUpperCase() === 'GOBIERNO').length;
             document.getElementById('kpiOposicion').innerText = filteredData.filter(r => getField(r, 'POSICIÓN', 'POSICION').toUpperCase() === 'OPOSICIÓN').length;
-            document.getElementById('kpiPartidos').innerText = new Set(filteredData.map(r => getField(r, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')).filter(Boolean)).size;
+            document.getElementById('kpiPartidos').innerText = new Set(filteredData.map(r => getField(r, ...PARTIDO_KEYS)).filter(Boolean)).size;
 
+            renderMesaDirectiva();
             renderCards(filteredData);
         }
 
-        function updateSelectOptions(elementId, keys) {
+        function updateSelectOptionsFromBase1(elementId, keys) {
             const select = document.getElementById(elementId);
+            if (!select) return;
             const currentValue = select.value;
 
-            const baseData = rawData.filter(item => {
-                if (currentUser.role === 'SUPER_ADMIN') return true;
-                const p = currentUser.permisos || {};
-                const itemP = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO');
-                const itemC = getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION');
-                const itemD = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION');
-
-                const hp = p.partidos?.length > 0;
-                const hc = p.comisiones?.length > 0;
-                const hd = p.departamentos?.length > 0;
-
-                if (!hp && !hc && !hd) return true;
-                return (hp && p.partidos.includes(itemP)) || (hc && p.comisiones.includes(itemC)) || (hd && p.departamentos.includes(itemD));
-            });
-
-            const uniqueOptions = [...new Set(baseData.map(item => getField(item, ...keys)).filter(Boolean))].sort();
+            const optionsFromBase1 = rawData.map(item => getField(item, ...keys)).filter(Boolean);
+            const uniqueOptions = [...new Set(optionsFromBase1)].sort();
 
             const defaultLabels = {
                 'filterDepartamento': 'Todos los Departamentos',
@@ -682,7 +709,68 @@
             });
         }
 
-        // CONTROL Y CONVERSIÓN DE FOTOS DE GOOGLE DRIVE Y ENLACES
+        function renderMesaDirectiva() {
+            const mesaSection = document.getElementById('mesaDirectivaSection');
+            const mesaGrid = document.getElementById('mesaDirectivaGrid');
+            const mesaBadge = document.getElementById('mesaDirectivaBadge');
+            const itemsMesa = getFilteredMesaDirectiva();
+
+            if (!mesaSection || !mesaGrid || !mesaBadge) return;
+
+            if (itemsMesa.length === 0) {
+                mesaSection.classList.add('hidden');
+                mesaGrid.innerHTML = '';
+                return;
+            }
+
+            mesaSection.classList.remove('hidden');
+            mesaBadge.innerText = `${itemsMesa.length} integrante(s)`;
+            mesaGrid.innerHTML = '';
+
+            itemsMesa.forEach((item) => {
+                const nombre = getField(item, 'NOMBRE', 'NOMBRE CONGRESISTA', 'INTEGRANTE', 'CONGRESISTA') || 'Sin Especificar';
+                const cargo = getField(item, 'CARGO', 'ROL', 'POSICION EN MESA', 'CARGO MESA DIRECTIVA') || 'Miembro Mesa Directiva';
+                const partido = getField(item, ...PARTIDO_KEYS) || getField(item, 'PARTIDO') || 'Partido No Definido';
+                const corpComision = getField(item, 'CORPORACION/COMISION', 'CORPORACION / COMISION', 'COMISION', 'CORPORACION') || 'Mesa Directiva';
+                
+                const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO', 'FOTOS');
+                const fotoUrl = processPhotoUrl(rawFoto);
+                
+                const realIndex = rawMesaDirectiva.indexOf(item);
+
+                mesaGrid.innerHTML += `
+                    <div class="bg-white rounded-2xl border border-amber-200/90 shadow-sm hover:shadow-md transition-all p-4 flex flex-col justify-between space-y-3 relative overflow-hidden group">
+                        <div class="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
+                        
+                        <div class="flex items-start gap-3.5">
+                            <img src="${fotoUrl}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="${nombre}" class="w-16 h-16 rounded-2xl object-cover border-2 border-amber-100 shrink-0 bg-slate-50 shadow-sm">
+                            
+                            <div class="space-y-1 overflow-hidden w-full">
+                                <span class="inline-block text-[9px] font-black uppercase px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md tracking-wider">
+                                    ${cargo}
+                                </span>
+                                <h4 class="font-bold text-slate-900 text-xs leading-snug truncate group-hover:text-amber-700 transition-colors">
+                                    ${nombre}
+                                </h4>
+                                <p class="text-[11px] text-slate-500 font-medium truncate">
+                                    ${partido}
+                                </p>
+                                <p class="text-[10px] text-amber-800/80 font-semibold truncate pt-1 border-t border-amber-100/60 flex items-center gap-1">
+                                    <i data-lucide="building-2" class="w-3 h-3 shrink-0 text-amber-600"></i> ${corpComision}
+                                </p>
+                            </div>
+                        </div>
+
+                        <button onclick="openMesaModal(${realIndex})" class="w-full py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-[11px] font-semibold rounded-xl border border-amber-200 transition-colors flex items-center justify-center gap-1">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i> Ver Detalles
+                        </button>
+                    </div>
+                `;
+            });
+
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
         function processPhotoUrl(rawUrl) {
             if (!rawUrl || typeof rawUrl !== 'string') return DEFAULT_AVATAR;
             let trimmed = rawUrl.trim();
@@ -702,10 +790,11 @@
 
         function renderCards(filtered) {
             const container = document.getElementById('cardsGrid');
+            if (!container) return;
             container.innerHTML = '';
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 text-xs font-semibold">No se encontraron registros autorizados o coincidentes.</div>`;
+                container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 text-xs font-semibold">No se encontraron integrantes para esta búsqueda.</div>`;
                 return;
             }
 
@@ -716,10 +805,10 @@
                 if (pos.toUpperCase() === 'OPOSICIÓN') posColor = 'bg-rose-50 text-rose-800 border-rose-200';
 
                 const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Sin Nombre';
-                const partido = getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO') || 'Sin Partido';
+                const partido = getField(item, ...PARTIDO_KEYS) || 'Sin Partido';
                 const depto = getField(item, 'DEPARTAMENTO', 'REGION', 'DEPARTAMENTO/CIRCUNSCRIPCION') || 'N/A';
                 
-                const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO');
+                const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO', 'FOTOS');
                 const fotoUrl = processPhotoUrl(rawFoto);
 
                 const card = `
@@ -756,7 +845,7 @@
                 container.innerHTML += card;
             });
 
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
         function resetFilters() {
@@ -773,7 +862,7 @@
             const modalBody = document.getElementById('modalBody');
 
             const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Congresista';
-            const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO');
+            const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO', 'FOTOS');
             const fotoUrl = processPhotoUrl(rawFoto);
 
             const allKeys = Object.keys(item);
@@ -797,7 +886,7 @@
                         <div class="text-center sm:text-left space-y-1">
                             <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">${getField(item, 'CORPORACION 2026-2030', 'CORPORACION 2022-2026', 'CORPORACION')}</span>
                             <h2 class="text-xl font-black text-slate-900 leading-snug">${name}</h2>
-                            <p class="text-xs text-slate-600 font-semibold">${getField(item, 'PARTIDO INSCRIPCION 2026/2030', 'PARTIDO 2022-2026', 'PARTIDO')}</p>
+                            <p class="text-xs text-slate-600 font-semibold">${getField(item, ...PARTIDO_KEYS)}</p>
                         </div>
                     </div>
 
@@ -813,12 +902,104 @@
             document.getElementById('downloadPdfBtn').onclick = () => downloadPDF(item);
             document.getElementById('detailModal').classList.remove('hidden');
             document.getElementById('detailModal').classList.add('flex');
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function openMesaModal(index) {
+            const item = rawMesaDirectiva[index];
+            const modalBody = document.getElementById('modalBody');
+
+            const name = getField(item, 'NOMBRE', 'NOMBRE CONGRESISTA', 'INTEGRANTE', 'CONGRESISTA') || 'Integrante Mesa Directiva';
+            const cargo = getField(item, 'CARGO', 'ROL', 'POSICION EN MESA') || 'Mesa Directiva';
+            const rawFoto = getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO', 'FOTOS');
+            const fotoUrl = processPhotoUrl(rawFoto);
+
+            const allKeys = Object.keys(item);
+            let dynamicFieldsHtml = '';
+            allKeys.forEach(key => {
+                const val = getField(item, key);
+                if (val) {
+                    dynamicFieldsHtml += `
+                        <div class="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/60">
+                            <span class="font-semibold text-amber-800 uppercase tracking-wider text-[10px] block">${key}</span>
+                            <span class="text-slate-800 font-medium">${val}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            modalBody.innerHTML = `
+                <div id="pdfContent" class="space-y-5 p-2">
+                    <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 border-b pb-4">
+                        <img src="${fotoUrl}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}';" alt="Foto" class="w-24 h-24 rounded-2xl object-cover border-2 border-amber-200 shadow-md shrink-0 bg-slate-50">
+                        <div class="text-center sm:text-left space-y-1">
+                            <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">${cargo}</span>
+                            <h2 class="text-xl font-black text-slate-900 leading-snug">${name}</h2>
+                            <p class="text-xs text-slate-600 font-semibold">${getField(item, ...PARTIDO_KEYS) || getField(item, 'PARTIDO')}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Información de la Mesa Directiva:</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                            ${dynamicFieldsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('downloadPdfBtn').onclick = () => downloadPDF(item);
+            document.getElementById('detailModal').classList.remove('hidden');
+            document.getElementById('detailModal').classList.add('flex');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function exportDirectoryExcel() {
+            if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+                alert('Función reservada únicamente para el Super Administrador.');
+                return;
+            }
+
+            const filtered = getFilteredData();
+            if (filtered.length === 0) {
+                alert('No hay registros filtrados para exportar.');
+                return;
+            }
+
+            const exportData = filtered.map(item => {
+                return {
+                    "Foto": getField(item, 'FOTO', 'FOTOGRAFIA', 'FOTOGRAFÍA', 'IMAGE', 'IMAGEN', 'URL FOTO', 'FOTOS'),
+                    "Nombre": getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE'),
+                    "Comisión": getField(item, 'COMISION 2026-2030', 'COMISION 2022-2026', 'COMISION'),
+                    "Partido": getField(item, ...PARTIDO_KEYS),
+                    "Teléfono": getField(item, 'TELEFONO', 'CELULAR', 'CONTACTO', 'TELÉFONO', 'TEL'),
+                    "Correo": getField(item, 'CORREO', 'EMAIL', 'CORREO ELECTRONICO', 'CORREO ELECTRÓNICO')
+                };
+            });
+
+            exportData.sort((a, b) => a.Nombre.localeCompare(b.Nombre));
+
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Directorio");
+
+            const max_widths = [
+                { wch: 30 },
+                { wch: 30 },
+                { wch: 20 },
+                { wch: 25 },
+                { wch: 18 },
+                { wch: 28 }
+            ];
+            worksheet['!cols'] = max_widths;
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(workbook, `Directorio_Filtrado_${dateStr}.xlsx`);
         }
 
         function downloadPDF(item) {
             const element = document.getElementById('pdfContent');
-            const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE') || 'Ficha';
+            const name = getField(item, 'NOMBRE CONGRESISTA', 'NOMBRE', 'INTEGRANTE') || 'Ficha';
             
             const opt = {
                 margin:       [0.4, 0.4, 0.4, 0.4],
